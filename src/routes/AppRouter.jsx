@@ -1,24 +1,36 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import LoginPage from "../pages/LoginPage";
-import SignupPage from "../pages/SignupPage";
-import DashboardPage from "../pages/DashboardPage";
+import {Navigate, Outlet, Route, Routes} from "react-router-dom";
+import LoginPage from "../pages/LoginPage.jsx";
+import SignupPage from "../pages/SignupPage.jsx";
+import DashboardPage from "../pages/DashboardPage.jsx";
+
+function ProtectedRoute() {
+    const token = localStorage.getItem("accessToken");
+    if (!token || token === "[object Object]") {
+        localStorage.removeItem("accessToken");
+        return <Navigate to="/login" replace />;
+    }
+    return <Outlet />;
+}
+
+function PublicRoute({ children }) {
+    const token = localStorage.getItem("accessToken");
+    if (token && token !== "[object Object]") return <Navigate to="/dashboard" replace />;
+    return children;
+}
+
 
 export default function AppRouter() {
     return (
-        <BrowserRouter>
-            <Routes>
-                {/* 기본 진입은 로그인으로 */}
-                <Route path="/" element={<Navigate to="/login" replace />} />
+        <Routes>
+            <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+            <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
 
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/signup" element={<SignupPage />} />
-
-                {/* 일단 대시보드는 임시 화면 */}
+            {/* ✅ 보호 영역 */}
+            <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
+            </Route>
 
-                {/* 없는 경로는 로그인으로 */}
-                <Route path="*" element={<Navigate to="/login" replace />} />
-            </Routes>
-        </BrowserRouter>
+            <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
     );
 }

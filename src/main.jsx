@@ -1,10 +1,13 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import AppRouter from "./routes/AppRouter";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import AppRouter from "./routes/AppRouter.jsx"; // 너 프로젝트 경로에 맞게
+import "./index.css";
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <AppRouter />
-  </StrictMode>,
-)
+ReactDOM.createRoot(document.getElementById("root")).render(
+    <React.StrictMode>
+        <BrowserRouter>
+            <AppRouter />
+        </BrowserRouter>
+    </React.StrictMode>
+);
