@@ -5,6 +5,7 @@ import LoginPage from "../pages/LoginPage.jsx";
 import SignupPage from "../pages/SignupPage.jsx";
 import DashboardPage from "../pages/DashboardPage.jsx";
 import { meApi } from "../api/auth";
+import StatsPage from "../pages/StatsPage.jsx";
 
 function ProtectedRoute() {
     const token = localStorage.getItem("accessToken");
@@ -71,6 +72,7 @@ export default function AppRouter() {
             {/* ✅ 보호 영역 */}
             <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/stats" element={<StatsPage />} /> {}
             </Route>
 
             <Route path="*" element={<Navigate to="/login" replace />} />
