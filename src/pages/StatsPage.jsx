@@ -5,6 +5,7 @@ import Input from "../components/ui/Input.jsx";
 import Button from "../components/ui/Button.jsx";
 import TopNav from "../components/layout/TopNav";
 import VolumeByCategoryChart from "../components/stats/VolumeByCategoryChart";
+import WeeklyTrendChart from "../components/stats/WeeklyTrendChart";
 
 export default function StatsPage() {
     const [data, setData] = useState(null);
@@ -83,7 +84,23 @@ export default function StatsPage() {
                     <KpiCard label="총 볼륨" value={`${Number(weeklyStats.totalVolume).toLocaleString()}kg`} />
                 </div>
 
+                {/* 주간 볼륨 요약 */}
+                <Card className="p-5">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-900">주간 볼륨 추이</h2>
+                            <p className="text-sm text-slate-500">
+                                {weeklyStats.weekStart} ~ {weeklyStats.weekEnd}
+                            </p>
+                        </div>
+                    </div>
 
+                    <div className="mt-4">
+                        <WeeklyTrendChart data={data.dailyVolume} />
+                    </div>
+                </Card>
+
+                {/* 부위별 볼륨 */}
                 <Card className="p-5">
                     <div className="flex items-center justify-between">
                         <div>
