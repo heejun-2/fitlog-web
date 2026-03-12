@@ -84,40 +84,43 @@ export default function StatsPage() {
                     <KpiCard label="총 볼륨" value={`${Number(weeklyStats.totalVolume).toLocaleString()}kg`} />
                 </div>
 
-                {/* 주간 볼륨 요약 */}
-                <Card className="p-5">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-lg font-bold text-slate-900">주간 볼륨 추이</h2>
-                            <p className="text-sm text-slate-500">
-                                {weeklyStats.weekStart} ~ {weeklyStats.weekEnd}
-                            </p>
-                        </div>
-                    </div>
 
-                    <div className="mt-4">
-                        <WeeklyTrendChart data={data.dailyVolume} />
-                    </div>
-                </Card>
-
-                {/* 부위별 볼륨 */}
-                <Card className="p-5">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-lg font-bold text-slate-900">부위별 볼륨</h2>
-                            <p className="text-sm text-slate-500">
-                                {weeklyStats.weekStart} ~ {weeklyStats.weekEnd}
-                            </p>
+                <div className="grid gap-6 lg:grid-cols-2">
+                    <Card className="p-5">
+                        {/* 주간 볼륨 추이 */}
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-900">주간 볼륨 추이</h2>
+                                <p className="text-sm text-slate-500">
+                                    {weeklyStats.weekStart} ~ {weeklyStats.weekEnd}
+                                </p>
+                            </div>
                         </div>
-                        <span className="text-xs font-semibold text-slate-500">
+
+                        <div className="mt-4">
+                            <WeeklyTrendChart data={data.dailyVolume} />
+                        </div>
+                    </Card>
+
+                    <Card className="p-5">
+                        {/* 부위별 볼륨 */}
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-900">부위별 볼륨</h2>
+                                <p className="text-sm text-slate-500">
+                                    {weeklyStats.weekStart} ~ {weeklyStats.weekEnd}
+                                </p>
+                            </div>
+                            <span className="text-xs font-semibold text-slate-500">
                           단위: kg
                         </span>
-                    </div>
+                        </div>
 
-                    <div className="mt-4">
-                        <VolumeByCategoryChart data={weeklyStats.volumeByCategory} />
-                    </div>
-                </Card>
+                        <div className="mt-4">
+                            <VolumeByCategoryChart data={weeklyStats.volumeByCategory} />
+                        </div>
+                    </Card>
+                </div>
 
 
                 {/* 카테고리별 볼륨 */}

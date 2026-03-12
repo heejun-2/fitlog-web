@@ -8,11 +8,12 @@ import {
     CartesianGrid,
 } from "recharts";
 
-const fmt = (d) => String(d).slice(5).replace("-", "/"); // 02-09 -> 02/09
+// const fmt = (d) => String(d).slice(5).replace("-", "/"); // 02-09 -> 02/09
+const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 export default function WeeklyTrendChart({ data }) {
     const chartData = (data ?? []).map((x) => ({
-        label: fmt(x.date),
+        label: days[new Date(x.date).getDay()],
         volume: Number(x.volume ?? 0),
         setCount: Number(x.setCount ?? 0),
     }));
@@ -33,7 +34,7 @@ export default function WeeklyTrendChart({ data }) {
                             boxShadow: "0 10px 30px rgba(2,6,23,0.08)",
                         }}
                     />
-                    <Line type="monotone" dataKey="volume" stroke="#0f172a" strokeWidth={3} dot={false} />
+                    <Line type="monotone" dataKey="volume" stroke="#0f172a" strokeWidth={3} dot={{ r: 4 }} />
                 </LineChart>
             </ResponsiveContainer>
         </div>
