@@ -6,6 +6,7 @@ import Button from "../components/ui/Button.jsx";
 import TopNav from "../components/layout/TopNav";
 import VolumeByCategoryChart from "../components/stats/VolumeByCategoryChart";
 import WeeklyTrendChart from "../components/stats/WeeklyTrendChart";
+import ExercisePrChart from "../components/stats/ExercisePrChart";
 
 export default function StatsPage() {
     const [data, setData] = useState(null);
@@ -137,53 +138,50 @@ export default function StatsPage() {
                     </div>
                 </Card>
 
-                {/* PR */}
-                <Card className="p-5">
-                    <h2 className="font-bold mb-3">🏆 개인 기록(PR)</h2>
 
-                    <table className="w-full text-sm">
-                        <thead>
-                        <tr className="border-b">
-                            <th className="text-left py-2">운동</th>
-                            <th className="text-right">최고 중량</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {exercisePrs.map((p) => (
-                            <tr key={p.exerciseId} className="border-b">
-                                <td className="py-2">{p.exerciseName}</td>
-                                <td className="text-right font-semibold">
-                                    {p.bestWeight}kg
-                                </td>
-                            </tr>
-                        ))}
-                        </tbody>
-                    </table>
-                </Card>
-
-                {/* 최근 운동 */}
-                <Card className="p-5">
-                    <h2 className="font-bold mb-3">최근 운동</h2>
-
-                    <div className="space-y-3">
-                        {recentWorkouts.map((w) => (
-                            <div key={w.workoutId} className="border rounded-lg p-3">
-                                <div className="flex justify-between text-sm">
-                                    <span>{w.workoutDate}</span>
-                                    <span>{w.totalVolume}kg</span>
-                                </div>
-
-                                {w.memo && (
-                                    <p className="text-slate-600 text-sm mt-1">{w.memo}</p>
-                                )}
-
-                                <p className="text-xs text-slate-500 mt-1">
-                                    {w.setCount}세트
+                <div className="grid gap-6 lg:grid-cols-2">
+                    {/* PR */}
+                    <Card className="p-5">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-900">개인 기록 (PR)</h2>
+                                <p className="text-sm text-slate-500">
+                                    종목별 최고 중량
                                 </p>
                             </div>
-                        ))}
-                    </div>
-                </Card>
+                        </div>
+
+                        <div className="mt-4">
+                            <ExercisePrChart data={exercisePrs} />
+                        </div>
+                    </Card>
+
+
+                    {/* 최근 운동 */}
+                    <Card className="p-5">
+                        <h2 className="font-bold mb-3">최근 운동</h2>
+
+                        <div className="space-y-3">
+                            {recentWorkouts.map((w) => (
+                                <div key={w.workoutId} className="border rounded-lg p-3">
+                                    <div className="flex justify-between text-sm">
+                                        <span>{w.workoutDate}</span>
+                                        <span>{w.totalVolume}kg</span>
+                                    </div>
+
+                                    {w.memo && (
+                                        <p className="text-slate-600 text-sm mt-1">{w.memo}</p>
+                                    )}
+
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        {w.setCount}세트
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
+                </div>
+
             </div>
         </div>
     );

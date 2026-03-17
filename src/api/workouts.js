@@ -22,5 +22,14 @@ export async function deleteWorkout(workoutId) {
     return res.data;
 }
 
+/**
+ * 특정 월에 운동 기록이 있는 날짜 목록 조회
+ * month는 1~12
+ */
+export async function getWorkoutDates(year, month) {
+    const res = await http.get("/api/workouts/dates", {params: { year, month },});
+    return res.data ?? [];
+}
+
 
 

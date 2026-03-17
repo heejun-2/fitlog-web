@@ -8,6 +8,21 @@ import { createWorkout } from "../api/workouts";
 import { deleteWorkout, updateWorkout } from "../api/workouts";
 import { useNavigate, useLocation } from "react-router-dom";
 import TopNav from "../components/layout/TopNav";
+import Calendar from "react-calendar";
+import "react-calendar/dist/Calendar.css";
+import { getWorkoutDates } from "../api/workouts";
+
+
+/**
+ * 로컬 날짜를 YYYY-MM-DD 문자열로 변환
+ * toISOString() 쓰면 UTC 때문에 하루 밀릴 수 있어서 직접 포맷
+ */
+function formatLocalDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
 
 
 export default function DashboardPage() {
@@ -27,6 +42,8 @@ export default function DashboardPage() {
     // ✅ B안: 조회 날짜 / 등록 날짜 분리
     const [queryDate, setQueryDate] = useState(today);      // 조회용
     const [workoutDate, setWorkoutDate] = useState(today);  // 등록용
+    const [calendarDate, setCalendarDate] = useState(new Date()); // 현재 달력에서 보고 있는 달
+    const [markedDates, setMarkedDates] = useState([]); // ["2026-02-11", ...]
 
     const [loading, setLoading] = useState(false);
     const [items, setItems] = useState([]);
@@ -49,6 +66,36 @@ export default function DashboardPage() {
         window.location.href = "/login";
     };
 
+    const fetchWorkoutDates = async (dateObj) => {
+        try {
+            const year = dateObj.getFullYear();
+            const month = dateObj.getMonth() + 1; // JS는 0~11이라 +1 필요
+            const data = await getWorkoutDates(year, month);
+            setMarkedDates(data);
+        } catch (e) {
+            console.error("운동 날짜 조회 실패", e);
+            setMarkedDates([]);
+        }
+    };
+
+    useEffect(() => {
+        fetchWorkoutDates(calendarDate);
+    }, [calendarDate]);
+
+    const handleCalendarChange = async (value) => {
+        const selected = Array.isArray(value) ? value[0] : value;
+        const formatted = formatLocalDate(selected);
+
+        setQueryDate(formatted);
+        await fetchWorkouts(formatted);
+    };
+
+    const handleActiveStartDateChange = ({ activeStartDate, view }) => {
+        // month view일 때만 반영
+        if (view === "month" && activeStartDate) {
+            setCalendarDate(activeStartDate);
+        }
+    };
     // 날짜를 파라미터로 받을 수 있게 (옵션2 구현 핵심)
     const fetchWorkouts = async (d = queryDate) => {
         setLoading(true);
@@ -147,6 +194,7 @@ export default function DashboardPage() {
             // 옵션2: 등록하면 그 날짜로 조회 날짜 자동 이동 + 즉시 조회
             setQueryDate(workoutDate);
             await fetchWorkouts(workoutDate);
+            await fetchWorkoutDates(calendarDate);
         } catch (e) {
             if (e?.response?.status === 401) {
                 logout();
@@ -211,6 +259,7 @@ export default function DashboardPage() {
             // 수정한 날짜로 자동 이동 + 즉시 조회(옵션2 유지)
             setQueryDate(editWorkoutDate);
             await fetchWorkouts(editWorkoutDate);
+            await fetchWorkoutDates(calendarDate);
         } catch (e) {
             if (e?.response?.status === 401) logout();
             else setErrorMsg("수정 실패");
@@ -224,6 +273,8 @@ export default function DashboardPage() {
         try {
             await deleteWorkout(workoutId);
             await fetchWorkouts(queryDate); // 지금 보고 있는 날짜 갱신
+            await fetchWorkoutDates(calendarDate);
+
         } catch (e) {
             if (e?.response?.status === 401) logout();
             else setErrorMsg("삭제 실패");
@@ -244,25 +295,45 @@ export default function DashboardPage() {
                         {/* 조회 카드 */}
                         <Card className="p-6 md:col-span-1">
                             <h2 className="text-lg font-bold text-slate-900">날짜별 운동 기록 조회</h2>
-                            <p className="mt-1 text-sm text-slate-600">조회 날짜를 선택하고 기록을 확인해.</p>
+                            <p className="mt-1 text-sm text-slate-600">
+                                운동 기록이 있는 날짜에는 점이 표시돼.
+                            </p>
 
-                            <div className="mt-4 space-y-3">
-                                <Input
-                                    label="조회 날짜"
-                                    type="date"
-                                    value={queryDate}
-                                    onChange={(e) => setQueryDate(e.target.value)}
+                            <div className="mt-4">
+                                <Calendar
+                                    locale="ko-KR"
+                                    value={new Date(queryDate)}
+                                    onChange={handleCalendarChange}
+                                    onActiveStartDateChange={handleActiveStartDateChange}
+                                    formatDay={(locale, date) => String(date.getDate())}
+                                    tileContent={({ date, view }) => {
+                                        // month 화면에서만 점 표시
+                                        if (view !== "month") return null;
+
+                                        const dateStr = formatLocalDate(date);
+
+                                        if (markedDates.includes(dateStr)) {
+                                            return (
+                                                <div className="mt-1 flex justify-center">
+                                                    <div className="h-1.5 w-1.5 rounded-full bg-slate-900" />
+                                                </div>
+                                            );
+                                        }
+
+                                        return null;
+                                    }}
                                 />
-                                <Button className="w-full" onClick={() => fetchWorkouts(queryDate)} disabled={loading}>
-                                    {loading ? "조회 중..." : "조회"}
-                                </Button>
-
-                                {errorMsg && (
-                                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                                        {errorMsg}
-                                    </div>
-                                )}
                             </div>
+
+                            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                                선택한 날짜: <span className="font-semibold">{queryDate}</span>
+                            </div>
+
+                            {errorMsg && (
+                                <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                                    {errorMsg}
+                                </div>
+                            )}
                         </Card>
 
                         {/* 등록 카드 */}
