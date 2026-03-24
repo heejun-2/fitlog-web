@@ -1,22 +1,19 @@
 import { useEffect, useState } from "react";
+import Calendar from "react-calendar";
+import "react-calendar/dist/Calendar.css";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import Input from "../components/ui/Input";
+import TopNav from "../components/layout/TopNav";
 import { http } from "../api/http";
 import { listExercises } from "../api/exercises";
-import { createWorkout } from "../api/workouts";
-import { deleteWorkout, updateWorkout } from "../api/workouts";
-import { useNavigate, useLocation } from "react-router-dom";
-import TopNav from "../components/layout/TopNav";
-import Calendar from "react-calendar";
-import "react-calendar/dist/Calendar.css";
-import { getWorkoutDates } from "../api/workouts";
+import { createWorkout, deleteWorkout, getWorkoutDates, updateWorkout } from "../api/workouts";
+import {
+    createWorkoutTemplate,
+    deleteWorkoutTemplate,
+    listWorkoutTemplates,
+} from "../api/workoutTemplates";
 
-
-/**
- * 로컬 날짜를 YYYY-MM-DD 문자열로 변환
- * toISOString() 쓰면 UTC 때문에 하루 밀릴 수 있어서 직접 포맷
- */
 function formatLocalDate(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -24,9 +21,41 @@ function formatLocalDate(date) {
     return `${year}-${month}-${day}`;
 }
 
+function createEmptySetRow() {
+    return { exerciseId: "", weight: "", reps: "" };
+}
+
+function normalizeSets(rows) {
+    return rows
+        .map((s, idx) => ({
+            exerciseId: Number(s.exerciseId),
+            weight: Number(s.weight),
+            reps: Number(s.reps),
+            setOrder: idx + 1,
+        }))
+        .filter(
+            (s) =>
+                Number.isFinite(s.exerciseId) &&
+                s.exerciseId > 0 &&
+                Number.isFinite(s.weight) &&
+                Number.isFinite(s.reps)
+        );
+}
+
+function mapRowsFromSets(sets = []) {
+    const rows = sets
+        .slice()
+        .sort((a, b) => (a.setOrder ?? 0) - (b.setOrder ?? 0))
+        .map((s) => ({
+            exerciseId: String(s.exerciseId ?? ""),
+            weight: String(s.weight ?? ""),
+            reps: String(s.reps ?? ""),
+        }));
+
+    return rows.length ? rows : [createEmptySetRow()];
+}
 
 export default function DashboardPage() {
-    // ✅ me는 그냥 표시(상태 갱신 X)
     const [me] = useState(() => {
         try {
             return JSON.parse(localStorage.getItem("me") || "null");
@@ -36,29 +65,29 @@ export default function DashboardPage() {
     });
 
     const today = new Date().toISOString().slice(0, 10);
-    const nav = useNavigate();
-    const location = useLocation();
-
-    // ✅ B안: 조회 날짜 / 등록 날짜 분리
-    const [queryDate, setQueryDate] = useState(today);      // 조회용
-    const [workoutDate, setWorkoutDate] = useState(today);  // 등록용
-    const [calendarDate, setCalendarDate] = useState(new Date()); // 현재 달력에서 보고 있는 달
-    const [markedDates, setMarkedDates] = useState([]); // ["2026-02-11", ...]
-
+    const [queryDate, setQueryDate] = useState(today);
+    const [workoutDate, setWorkoutDate] = useState(today);
+    const [calendarDate, setCalendarDate] = useState(new Date());
+    const [markedDates, setMarkedDates] = useState([]);
     const [loading, setLoading] = useState(false);
     const [items, setItems] = useState([]);
     const [errorMsg, setErrorMsg] = useState("");
-
-    // ✅ 운동 목록(Select)
-    const [exercises, setExercises] = useState([]); // [{id, name, category}]
+    const [exercises, setExercises] = useState([]);
     const [memo, setMemo] = useState("");
-    const [sets, setSets] = useState([{ exerciseId: "", weight: "", reps: "" }]);
+    const [sets, setSets] = useState([createEmptySetRow()]);
     const [creating, setCreating] = useState(false);
+
+    const [templates, setTemplates] = useState([]);
+    const [templatesLoading, setTemplatesLoading] = useState(false);
+    const [templateSaving, setTemplateSaving] = useState(false);
+    const [templateName, setTemplateName] = useState("");
+    const [templateError, setTemplateError] = useState("");
+    const [templateNotice, setTemplateNotice] = useState("");
 
     const [editingId, setEditingId] = useState(null);
     const [editWorkoutDate, setEditWorkoutDate] = useState(today);
     const [editMemo, setEditMemo] = useState("");
-    const [editSets, setEditSets] = useState([{ exerciseId: "", weight: "", reps: "" }]);
+    const [editSets, setEditSets] = useState([createEmptySetRow()]);
 
     const logout = () => {
         localStorage.removeItem("accessToken");
@@ -69,46 +98,28 @@ export default function DashboardPage() {
     const fetchWorkoutDates = async (dateObj) => {
         try {
             const year = dateObj.getFullYear();
-            const month = dateObj.getMonth() + 1; // JS는 0~11이라 +1 필요
+            const month = dateObj.getMonth() + 1;
             const data = await getWorkoutDates(year, month);
             setMarkedDates(data);
         } catch (e) {
-            console.error("운동 날짜 조회 실패", e);
+            console.error("Failed to load workout dates", e);
             setMarkedDates([]);
         }
     };
 
-    useEffect(() => {
-        fetchWorkoutDates(calendarDate);
-    }, [calendarDate]);
-
-    const handleCalendarChange = async (value) => {
-        const selected = Array.isArray(value) ? value[0] : value;
-        const formatted = formatLocalDate(selected);
-
-        setQueryDate(formatted);
-        await fetchWorkouts(formatted);
-    };
-
-    const handleActiveStartDateChange = ({ activeStartDate, view }) => {
-        // month view일 때만 반영
-        if (view === "month" && activeStartDate) {
-            setCalendarDate(activeStartDate);
-        }
-    };
-    // 날짜를 파라미터로 받을 수 있게 (옵션2 구현 핵심)
-    const fetchWorkouts = async (d = queryDate) => {
+    const fetchWorkouts = async (date = queryDate) => {
         setLoading(true);
         setErrorMsg("");
+
         try {
-            const res = await http.get("/api/workouts", { params: { date: d } });
+            const res = await http.get("/api/workouts", { params: { date } });
             setItems(res.data ?? []);
         } catch (e) {
             if (e?.response?.status === 401) {
                 logout();
                 return;
             }
-            setErrorMsg("조회 실패. 서버가 켜져있는지 / 토큰이 유효한지 확인해줘.");
+            setErrorMsg("운동 기록을 불러오지 못했습니다. 서버 상태와 로그인 세션을 확인해주세요.");
             setItems([]);
         } finally {
             setLoading(false);
@@ -125,73 +136,141 @@ export default function DashboardPage() {
         }
     };
 
+    const fetchTemplates = async () => {
+        setTemplatesLoading(true);
+        setTemplateError("");
+
+        try {
+            const data = await listWorkoutTemplates();
+            setTemplates(data ?? []);
+        } catch (e) {
+            if (e?.response?.status === 401) {
+                logout();
+                return;
+            }
+            setTemplateError("운동 템플릿을 불러오지 못했습니다.");
+            setTemplates([]);
+        } finally {
+            setTemplatesLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchWorkoutDates(calendarDate);
+    }, [calendarDate]);
+
     useEffect(() => {
         fetchExercises();
         fetchWorkouts(today);
-        // eslint-disable-next-line
+        fetchTemplates();
     }, []);
 
-    // 세트 행 조작
-    const addSetRow = () =>
-        setSets((prev) => [...prev, { exerciseId: "", weight: "", reps: "" }]);
-
-    const removeSetRow = (idx) =>
-        setSets((prev) => prev.filter((_, i) => i !== idx));
-
-    const updateSetRow = (idx, key, value) => {
-        setSets((prev) =>
-            prev.map((row, i) => (i === idx ? { ...row, [key]: value } : row))
-        );
+    const handleCalendarChange = async (value) => {
+        const selected = Array.isArray(value) ? value[0] : value;
+        const formatted = formatLocalDate(selected);
+        setQueryDate(formatted);
+        await fetchWorkouts(formatted);
     };
 
-    const addEditSet = () =>
-        setEditSets((prev) => [...prev, { exerciseId: "", weight: "", reps: "" }]);
+    const handleActiveStartDateChange = ({ activeStartDate, view }) => {
+        if (view === "month" && activeStartDate) {
+            setCalendarDate(activeStartDate);
+        }
+    };
 
-    const removeEditSet = (idx) =>
-        setEditSets((prev) => prev.filter((_, i) => i !== idx));
+    const addSetRow = () => setSets((prev) => [...prev, createEmptySetRow()]);
+    const removeSetRow = (idx) => setSets((prev) => prev.filter((_, i) => i !== idx));
+    const updateSetRow = (idx, key, value) => {
+        setSets((prev) => prev.map((row, i) => (i === idx ? { ...row, [key]: value } : row)));
+    };
 
+    const addEditSet = () => setEditSets((prev) => [...prev, createEmptySetRow()]);
+    const removeEditSet = (idx) => setEditSets((prev) => prev.filter((_, i) => i !== idx));
     const updateEditSet = (idx, key, value) => {
         setEditSets((prev) => prev.map((row, i) => (i === idx ? { ...row, [key]: value } : row)));
+    };
+
+    const applyTemplate = (template) => {
+        setMemo(template.memo ?? "");
+        setSets(mapRowsFromSets(template.sets));
+        setTemplateError("");
+        setTemplateNotice(`"${template.name}" 템플릿을 적용했습니다.`);
+    };
+
+    const onSaveTemplate = async () => {
+        setTemplateError("");
+        setTemplateNotice("");
+
+        const cleanedSets = normalizeSets(sets);
+        if (!templateName.trim()) {
+            setTemplateError("템플릿 이름을 입력해주세요.");
+            return;
+        }
+
+        if (cleanedSets.length < 1) {
+            setTemplateError("유효한 세트를 1개 이상 입력한 뒤 템플릿을 저장해주세요.");
+            return;
+        }
+
+        setTemplateSaving(true);
+        try {
+            await createWorkoutTemplate({
+                name: templateName.trim(),
+                memo: memo.trim() || null,
+                sets: cleanedSets,
+            });
+
+            setTemplateName("");
+            setTemplateNotice("운동 템플릿을 저장했습니다.");
+            await fetchTemplates();
+        } catch (e) {
+            if (e?.response?.status === 401) {
+                logout();
+                return;
+            }
+            setTemplateError("운동 템플릿 저장에 실패했습니다.");
+        } finally {
+            setTemplateSaving(false);
+        }
+    };
+
+    const onDeleteTemplate = async (templateId) => {
+        if (!window.confirm("이 운동 템플릿을 삭제할까요?")) {
+            return;
+        }
+
+        try {
+            await deleteWorkoutTemplate(templateId);
+            setTemplateNotice("운동 템플릿을 삭제했습니다.");
+            await fetchTemplates();
+        } catch (e) {
+            if (e?.response?.status === 401) {
+                logout();
+                return;
+            }
+            setTemplateError("운동 템플릿 삭제에 실패했습니다.");
+        }
     };
 
     const onCreateWorkout = async () => {
         setErrorMsg("");
 
-        // DTO 맞춤: workoutDate, sets[].setOrder 필수
-        // - exerciseId/weight/reps는 Integer/Long NotNull이라 숫자 변환 필수
-        const cleanedSets = sets
-            .map((s, idx) => ({
-                exerciseId: Number(s.exerciseId),
-                weight: Number(s.weight),
-                reps: Number(s.reps),
-                setOrder: idx + 1, // ✅ 필수
-            }))
-            .filter(
-                (s) =>
-                    Number.isFinite(s.exerciseId) &&
-                    s.exerciseId > 0 &&
-                    Number.isFinite(s.weight) &&
-                    Number.isFinite(s.reps)
-            );
-
+        const cleanedSets = normalizeSets(sets);
         if (cleanedSets.length < 1) {
-            setErrorMsg("세트 기록은 최소 1개 이상이어야 합니다. (운동/무게/횟수 입력)");
+            setErrorMsg("운동을 저장하려면 유효한 세트를 1개 이상 입력해주세요.");
             return;
         }
 
         setCreating(true);
         try {
             await createWorkout({
-                workoutDate: workoutDate, // ✅ 등록 날짜 사용
+                workoutDate,
                 memo: memo.trim() || null,
                 sets: cleanedSets,
             });
 
-            // 입력값 초기화
             setMemo("");
-            setSets([{ exerciseId: "", weight: "", reps: "" }]);
-
-            // 옵션2: 등록하면 그 날짜로 조회 날짜 자동 이동 + 즉시 조회
+            setSets([createEmptySetRow()]);
             setQueryDate(workoutDate);
             await fetchWorkouts(workoutDate);
             await fetchWorkoutDates(calendarDate);
@@ -200,50 +279,25 @@ export default function DashboardPage() {
                 logout();
                 return;
             }
-            setErrorMsg("등록 실패. 입력값을 확인해줘.");
+            setErrorMsg("운동 기록 저장에 실패했습니다.");
         } finally {
             setCreating(false);
         }
     };
 
-    // 수정
-    const startEdit = (w, workoutId) => {
+    const startEdit = (workout, workoutId) => {
         setEditingId(workoutId);
-        setEditWorkoutDate(w.workoutDate ?? w.date ?? queryDate);
-        setEditMemo(w.memo ?? "");
-
-        const normalized = (w.sets ?? [])
-            .slice()
-            .sort((a, b) => (a.setOrder ?? 0) - (b.setOrder ?? 0))
-            .map((s) => ({
-                exerciseId: s.exerciseId ?? "",
-                weight: String(s.weight ?? ""),
-                reps: String(s.reps ?? ""),
-            }));
-
-        setEditSets(normalized.length ? normalized : [{ exerciseId: "", weight: "", reps: "" }]);
+        setEditWorkoutDate(workout.workoutDate ?? workout.date ?? queryDate);
+        setEditMemo(workout.memo ?? "");
+        setEditSets(mapRowsFromSets(workout.sets));
     };
 
     const saveEdit = async () => {
         setErrorMsg("");
 
-        const cleanedSets = editSets
-            .map((s, idx) => ({
-                exerciseId: Number(s.exerciseId),
-                weight: Number(s.weight),
-                reps: Number(s.reps),
-                setOrder: idx + 1, // ✅ 필수
-            }))
-            .filter(
-                (s) =>
-                    Number.isFinite(s.exerciseId) &&
-                    s.exerciseId > 0 &&
-                    Number.isFinite(s.weight) &&
-                    Number.isFinite(s.reps)
-            );
-
+        const cleanedSets = normalizeSets(editSets);
         if (cleanedSets.length < 1) {
-            setErrorMsg("세트 기록은 최소 1개 이상이어야 합니다.");
+            setErrorMsg("운동을 수정하려면 유효한 세트를 1개 이상 입력해주세요.");
             return;
         }
 
@@ -255,328 +309,411 @@ export default function DashboardPage() {
             });
 
             setEditingId(null);
-
-            // 수정한 날짜로 자동 이동 + 즉시 조회(옵션2 유지)
             setQueryDate(editWorkoutDate);
             await fetchWorkouts(editWorkoutDate);
             await fetchWorkoutDates(calendarDate);
         } catch (e) {
-            if (e?.response?.status === 401) logout();
-            else setErrorMsg("수정 실패");
+            if (e?.response?.status === 401) {
+                logout();
+            } else {
+                setErrorMsg("운동 기록 수정에 실패했습니다.");
+            }
         }
     };
 
-    // 삭제
     const onDelete = async (workoutId) => {
-        if (!window.confirm("이 운동 기록을 삭제할까?")) return;
+        if (!window.confirm("이 운동 기록을 삭제할까요?")) {
+            return;
+        }
 
         try {
             await deleteWorkout(workoutId);
-            await fetchWorkouts(queryDate); // 지금 보고 있는 날짜 갱신
+            await fetchWorkouts(queryDate);
             await fetchWorkoutDates(calendarDate);
-
         } catch (e) {
-            if (e?.response?.status === 401) logout();
-            else setErrorMsg("삭제 실패");
+            if (e?.response?.status === 401) {
+                logout();
+            } else {
+                setErrorMsg("운동 기록 삭제에 실패했습니다.");
+            }
         }
     };
 
-
-
     return (
-        <div className="min-h-screen bg-slate-50">
-            {/* Top bar */}
-            <div className="min-h-screen bg-slate-50">
-                <TopNav me={me} onLogout={logout} />
+        <div className="ds-app-shell">
+            <TopNav me={me} onLogout={logout} />
 
-                {/* Content */}
-                <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
-                    <div className="grid gap-6 md:grid-cols-3">
-                        {/* 조회 카드 */}
-                        <Card className="p-6 md:col-span-1">
-                            <h2 className="text-lg font-bold text-slate-900">날짜별 운동 기록 조회</h2>
-                            <p className="mt-1 text-sm text-slate-600">
-                                운동 기록이 있는 날짜에는 점이 표시돼.
+            <div className="ds-page-wrap space-y-6">
+                <section className="ds-glass ds-panel p-6 sm:p-7">
+                    <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                        <div>
+                            <p className="ds-kicker">Workout Console</p>
+                            <h1 className="ds-title mt-3 text-3xl font-bold">일일 운동 기록 관리</h1>
+                            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                                캘린더 조회, 템플릿 적용, 세트 입력, 운동 기록 관리를 한 화면에서 처리할 수 있습니다.
                             </p>
+                        </div>
 
-                            <div className="mt-4">
-                                <Calendar
-                                    locale="ko-KR"
-                                    value={new Date(queryDate)}
-                                    onChange={handleCalendarChange}
-                                    onActiveStartDateChange={handleActiveStartDateChange}
-                                    formatDay={(locale, date) => String(date.getDate())}
-                                    tileContent={({ date, view }) => {
-                                        // month 화면에서만 점 표시
-                                        if (view !== "month") return null;
+                        <div className="grid gap-3 sm:grid-cols-3">
+                            <MetricBadge label="조회 날짜" value={queryDate} />
+                            <MetricBadge label="기록 수" value={`${items.length}건`} />
+                            <MetricBadge label="템플릿" value={`${templates.length}개`} />
+                        </div>
+                    </div>
+                </section>
 
-                                        const dateStr = formatLocalDate(date);
+                {errorMsg && <div className="ds-alert px-4 py-3 text-sm">{errorMsg}</div>}
 
-                                        if (markedDates.includes(dateStr)) {
-                                            return (
-                                                <div className="mt-1 flex justify-center">
-                                                    <div className="h-1.5 w-1.5 rounded-full bg-slate-900" />
-                                                </div>
-                                            );
-                                        }
+                <div className="grid gap-6 xl:grid-cols-[0.9fr_1.15fr_1.05fr]">
+                    <Card className="p-5">
+                        <p className="ds-kicker">Calendar</p>
+                        <h2 className="ds-title mt-2 text-2xl font-bold">운동 기록 조회</h2>
+                        <p className="mt-2 text-sm text-slate-600">
+                            운동 기록이 있는 날짜는 캘린더에 표시됩니다.
+                        </p>
 
+                        <div className="ds-calendar-shell mt-5">
+                            <Calendar
+                                locale="ko-KR"
+                                value={new Date(queryDate)}
+                                onChange={handleCalendarChange}
+                                onActiveStartDateChange={handleActiveStartDateChange}
+                                formatDay={(locale, date) => String(date.getDate())}
+                                tileContent={({ date, view }) => {
+                                    if (view !== "month") {
                                         return null;
-                                    }}
-                                />
-                            </div>
+                                    }
 
-                            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                                선택한 날짜: <span className="font-semibold">{queryDate}</span>
-                            </div>
+                                    const dateStr = formatLocalDate(date);
+                                    if (!markedDates.includes(dateStr)) {
+                                        return null;
+                                    }
 
-                            {errorMsg && (
-                                <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                                    {errorMsg}
-                                </div>
-                            )}
-                        </Card>
-
-                        {/* 등록 카드 */}
-                        <Card className="p-6 md:col-span-1">
-                            <h2 className="text-lg font-bold text-slate-900">운동 기록 추가</h2>
-                            <p className="mt-1 text-sm text-slate-600">운동 날짜를 선택하고 세트를 저장해.</p>
-
-                            <div className="mt-4 space-y-3">
-                                <Input
-                                    label="운동 날짜"
-                                    type="date"
-                                    value={workoutDate}
-                                    onChange={(e) => setWorkoutDate(e.target.value)}
-                                />
-
-                                <Input
-                                    label="메모"
-                                    value={memo}
-                                    onChange={(e) => setMemo(e.target.value)}
-                                    placeholder="예: 하체 / 컨디션 좋음"
-                                />
-
-                                <div className="space-y-3">
-                                    {sets.map((s, idx) => (
-                                        <div key={idx} className="rounded-xl border p-3 space-y-2">
-                                            <div className="space-y-1">
-                                                <label className="text-sm font-semibold text-slate-700">운동</label>
-                                                <select
-                                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2"
-                                                    value={s.exerciseId}
-                                                    onChange={(e) => updateSetRow(idx, "exerciseId", e.target.value)}
-                                                >
-                                                    <option value="">운동 선택</option>
-                                                    {exercises.map((ex) => (
-                                                        <option key={ex.id} value={ex.id}>
-                                                            {ex.name}{ex.category ? ` (${ex.category})` : ""}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <Input
-                                                    label="무게(kg)"
-                                                    value={s.weight}
-                                                    onChange={(e) => updateSetRow(idx, "weight", e.target.value)}
-                                                    placeholder="예: 80"
-                                                />
-                                                <Input
-                                                    label="횟수(reps)"
-                                                    value={s.reps}
-                                                    onChange={(e) => updateSetRow(idx, "reps", e.target.value)}
-                                                    placeholder="예: 8"
-                                                />
-                                            </div>
-
-                                            {sets.length > 1 && (
-                                                <Button variant="ghost" onClick={() => removeSetRow(idx)}>
-                                                    이 세트 삭제
-                                                </Button>
-                                            )}
+                                    return (
+                                        <div className="mt-1 flex justify-center">
+                                            <div className="h-1.5 w-1.5 rounded-full bg-orange-500" />
                                         </div>
-                                    ))}
-                                </div>
+                                    );
+                                }}
+                            />
+                        </div>
 
-                                <Button variant="ghost" onClick={addSetRow}>
-                                    + 세트 추가
-                                </Button>
+                        <div className="ds-panel-soft mt-4 px-4 py-3 text-sm">
+                            선택한 날짜
+                            <span className="ml-2 font-semibold text-slate-950">{queryDate}</span>
+                        </div>
+                    </Card>
 
-                                <Button className="w-full" onClick={onCreateWorkout} disabled={creating}>
-                                    {creating ? "저장 중..." : "저장"}
+                    <Card className="p-5">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <p className="ds-kicker">Templates</p>
+                                <h2 className="ds-title mt-2 text-2xl font-bold">운동 템플릿</h2>
+                                <p className="mt-2 text-sm text-slate-600">
+                                    현재 입력 중인 운동 구성을 템플릿으로 저장하고 다시 불러올 수 있습니다.
+                                </p>
+                            </div>
+                            <span className="ds-badge">연동형</span>
+                        </div>
+
+                        <div className="mt-5 space-y-4">
+                            <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                                <Input
+                                    label="템플릿 이름"
+                                    value={templateName}
+                                    onChange={(e) => setTemplateName(e.target.value)}
+                                    placeholder="예: 상체 A 루틴"
+                                />
+                                <Button
+                                    className="self-end justify-center"
+                                    onClick={onSaveTemplate}
+                                    disabled={templateSaving}
+                                >
+                                    {templateSaving ? "저장 중..." : "템플릿 저장"}
                                 </Button>
                             </div>
-                        </Card>
 
-                        {/* 결과 카드 */}
-                        <div className="md:col-span-1 space-y-4">
-                            <div className="flex items-end justify-between">
-                                <div>
-                                    <h2 className="text-lg font-bold text-slate-900">결과</h2>
-                                    <p className="text-sm text-slate-600">{items.length}개 기록</p>
-                                </div>
+                            {templateError && <div className="ds-alert px-4 py-3 text-sm">{templateError}</div>}
+                            {templateNotice && <div className="ds-success px-4 py-3 text-sm">{templateNotice}</div>}
+
+                            <div className="space-y-3">
+                                {templatesLoading ? (
+                                    <div className="ds-panel-soft px-4 py-4 text-sm text-slate-600">
+                                        템플릿을 불러오는 중입니다...
+                                    </div>
+                                ) : templates.length === 0 ? (
+                                    <div className="ds-panel-soft px-4 py-4 text-sm text-slate-600">
+                                        저장된 템플릿이 없습니다. 현재 폼으로 첫 템플릿을 만들어보세요.
+                                    </div>
+                                ) : (
+                                    templates.map((template) => (
+                                        <TemplateCard
+                                            key={template.id}
+                                            template={template}
+                                            exercises={exercises}
+                                            onApply={applyTemplate}
+                                            onDelete={onDeleteTemplate}
+                                        />
+                                    ))
+                                )}
                             </div>
 
-                            {items.length === 0 ? (
-                                <Card className="p-6">
-                                    <p className="text-sm text-slate-600">
-                                        해당 날짜에 기록이 없어. 다른 날짜로 조회해봐.
-                                    </p>
-                                </Card>
-                            ) : (
-                                <div className="space-y-3">
-                                    {items.map((w, idx) => {
-                                        const workoutId = w.id ?? w.workoutId;
-                                        return (
-                                            <Card key={workoutId ?? idx} className="p-5">
+                            <div className="border-t border-white/40 pt-2" />
 
-                                                {/* ===== 수정 모드 ===== */}
-                                                {editingId === workoutId ? (
+                            <Input
+                                label="운동 날짜"
+                                type="date"
+                                value={workoutDate}
+                                onChange={(e) => setWorkoutDate(e.target.value)}
+                            />
 
-                                                    <div className="space-y-4">
+                            <Input
+                                label="메모"
+                                value={memo}
+                                onChange={(e) => setMemo(e.target.value)}
+                                placeholder="운동 메모를 입력하세요"
+                            />
 
-                                                        <Input
-                                                            label="운동 날짜"
-                                                            type="date"
-                                                            value={editWorkoutDate}
-                                                            onChange={(e) => setEditWorkoutDate(e.target.value)}
-                                                        />
+                            <div className="space-y-3">
+                                {sets.map((row, idx) => (
+                                    <SetEditor
+                                        key={idx}
+                                        exercises={exercises}
+                                        row={row}
+                                        index={idx}
+                                        onChange={updateSetRow}
+                                        onRemove={removeSetRow}
+                                        removable={sets.length > 1}
+                                    />
+                                ))}
+                            </div>
 
-                                                        <Input
-                                                            label="메모"
-                                                            value={editMemo}
-                                                            onChange={(e) => setEditMemo(e.target.value)}
-                                                            placeholder="메모"
-                                                        />
+                            <Button variant="ghost" className="w-full justify-center" onClick={addSetRow}>
+                                + 세트 추가
+                            </Button>
 
-                                                        {editSets.map((s, i) => (
-                                                            <div key={i} className="rounded-xl border p-3 space-y-2">
+                            <Button className="w-full justify-center" onClick={onCreateWorkout} disabled={creating}>
+                                {creating ? "저장 중..." : "운동 저장"}
+                            </Button>
+                        </div>
+                    </Card>
 
-                                                                <div className="space-y-1">
-                                                                    <label
-                                                                        className="text-sm font-semibold text-slate-700">운동</label>
-                                                                    <select
-                                                                        className="w-full rounded-xl border border-slate-200 px-3 py-2"
-                                                                        value={s.exerciseId}
-                                                                        onChange={(e) => updateEditSet(i, "exerciseId", e.target.value)}
-                                                                    >
-                                                                        <option value="">운동 선택</option>
-                                                                        {exercises.map((ex) => (
-                                                                            <option key={ex.id} value={ex.id}>
-                                                                                {ex.name}
-                                                                            </option>
-                                                                        ))}
-                                                                    </select>
-                                                                </div>
+                    <div className="space-y-4">
+                        <div>
+                            <p className="ds-kicker">Results</p>
+                            <h2 className="ds-title mt-2 text-2xl font-bold">운동 기록 목록</h2>
+                            <p className="mt-1 text-sm text-slate-500">선택한 날짜의 기록 {items.length}건</p>
+                        </div>
 
-                                                                <div className="grid grid-cols-2 gap-2">
-                                                                    <Input
-                                                                        label="무게(kg)"
-                                                                        value={s.weight}
-                                                                        onChange={(e) => updateEditSet(i, "weight", e.target.value)}
-                                                                    />
-                                                                    <Input
-                                                                        label="횟수"
-                                                                        value={s.reps}
-                                                                        onChange={(e) => updateEditSet(i, "reps", e.target.value)}
-                                                                    />
-                                                                </div>
+                        {items.length === 0 ? (
+                            <Card className="p-6">
+                                <p className="text-sm leading-6 text-slate-600">
+                                    선택한 날짜에는 운동 기록이 없습니다.
+                                </p>
+                            </Card>
+                        ) : (
+                            items.map((workout, idx) => {
+                                const workoutId = workout.id ?? workout.workoutId;
 
-                                                                {editSets.length > 1 && (
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        onClick={() => removeEditSet(i)}
-                                                                    >
-                                                                        이 세트 삭제
-                                                                    </Button>
-                                                                )}
-                                                            </div>
-                                                        ))}
+                                return (
+                                    <Card key={workoutId ?? idx} className="p-5">
+                                        {editingId === workoutId ? (
+                                            <div className="space-y-4">
+                                                <Input
+                                                    label="운동 날짜"
+                                                    type="date"
+                                                    value={editWorkoutDate}
+                                                    onChange={(e) => setEditWorkoutDate(e.target.value)}
+                                                />
 
-                                                        <Button variant="ghost" onClick={addEditSet}>
-                                                            + 세트 추가
-                                                        </Button>
+                                                <Input
+                                                    label="메모"
+                                                    value={editMemo}
+                                                    onChange={(e) => setEditMemo(e.target.value)}
+                                                    placeholder="운동 메모를 입력하세요"
+                                                />
 
-                                                        <div className="flex gap-2 pt-2">
-                                                            <Button className="w-full" onClick={saveEdit}>
-                                                                저장
-                                                            </Button>
-                                                            <Button
-                                                                className="w-full"
-                                                                variant="ghost"
-                                                                onClick={() => setEditingId(null)}
-                                                            >
-                                                                취소
-                                                            </Button>
-                                                        </div>
+                                                {editSets.map((row, i) => (
+                                                    <SetEditor
+                                                        key={i}
+                                                        exercises={exercises}
+                                                        row={row}
+                                                        index={i}
+                                                        onChange={updateEditSet}
+                                                        onRemove={removeEditSet}
+                                                        removable={editSets.length > 1}
+                                                    />
+                                                ))}
 
+                                                <Button variant="ghost" className="w-full justify-center" onClick={addEditSet}>
+                                                    + 세트 추가
+                                                </Button>
+
+                                                <div className="flex gap-2">
+                                                    <Button className="w-full justify-center" onClick={saveEdit}>
+                                                        저장
+                                                    </Button>
+                                                    <Button
+                                                        className="w-full justify-center"
+                                                        variant="ghost"
+                                                        onClick={() => setEditingId(null)}
+                                                    >
+                                                        취소
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div>
+                                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                                            운동 날짜
+                                                        </p>
+                                                        <p className="mt-2 text-lg font-semibold text-slate-950">
+                                                            {workout.workoutDate ?? workout.date ?? queryDate}
+                                                        </p>
                                                     </div>
 
-                                                ) : (
+                                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                                        <span className="ds-badge">운동</span>
+                                                        <Button variant="ghost" onClick={() => startEdit(workout, workoutId)}>
+                                                            수정
+                                                        </Button>
+                                                        <Button variant="danger" onClick={() => onDelete(workoutId)}>
+                                                            삭제
+                                                        </Button>
+                                                    </div>
+                                                </div>
 
-                                                    /* ===== 보기 모드 ===== */
-                                                    <>
-
-                                                        <div className="flex items-start justify-between gap-3">
-
-                                                            <div>
-                                                                <p className="text-sm text-slate-500">날짜</p>
-                                                                <p className="font-semibold text-slate-900">
-                                                                    {w.workoutDate ?? w.date ?? queryDate}
-                                                                </p>
-                                                            </div>
-
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                                                                  Workout
-                                                                </span>
-
-                                                                <Button variant="ghost" onClick={() => startEdit(w, workoutId)}>
-                                                                    수정
-                                                                </Button>
-                                                                <Button variant="ghost" onClick={() => onDelete(workoutId)}>
-                                                                    삭제
-                                                                </Button>
-                                                            </div>
-
-                                                        </div>
-
-                                                        {w.memo && (
-                                                            <div className="mt-3 text-sm text-slate-700">
-                                                                <span className="font-semibold">메모:</span> {w.memo}
-                                                            </div>
-                                                        )}
-
-                                                        <div className="mt-4">
-                                                            <p className="text-sm font-semibold text-slate-900">세트</p>
-
-                                                            <ul className="mt-2 space-y-1 text-sm text-slate-700 list-disc pl-5">
-                                                                {(w.sets ?? [])
-                                                                    .slice()
-                                                                    .sort((a, b) => (a.setOrder ?? 0) - (b.setOrder ?? 0))
-                                                                    .map((s, i) => (
-                                                                        <li key={s.id ?? i}>
-                                                                            {s.exerciseName ?? `exerciseId:${s.exerciseId}`} / {s.weight}kg
-                                                                            × {s.reps}회
-                                                                        </li>
-                                                                    ))}
-                                                            </ul>
-
-                                                        </div>
-
-                                                    </>
+                                                {workout.memo && (
+                                                    <div className="ds-panel-soft mt-4 px-4 py-3 text-sm leading-6 text-slate-700">
+                                                        {workout.memo}
+                                                    </div>
                                                 )}
-                                            </Card>
-                                        );
-                                    })}
 
-                                </div>
-                            )}
-                        </div>
+                                                <div className="mt-4">
+                                                    <p className="text-sm font-semibold text-slate-900">세트 구성</p>
+                                                    <ul className="mt-3 space-y-2">
+                                                        {(workout.sets ?? [])
+                                                            .slice()
+                                                            .sort((a, b) => (a.setOrder ?? 0) - (b.setOrder ?? 0))
+                                                            .map((set, i) => (
+                                                                <li key={set.id ?? i} className="ds-panel-soft px-4 py-3 text-sm text-slate-700">
+                                                                    <span className="font-semibold text-slate-900">
+                                                                        {set.exerciseName ?? `exerciseId:${set.exerciseId}`}
+                                                                    </span>
+                                                                    <span className="mx-2 text-slate-300">/</span>
+                                                                    {set.weight}kg x {set.reps}
+                                                                </li>
+                                                            ))}
+                                                    </ul>
+                                                </div>
+                                            </>
+                                        )}
+                                    </Card>
+                                );
+                            })
+                        )}
                     </div>
                 </div>
             </div>
+        </div>
+    );
+}
+
+function MetricBadge({ label, value }) {
+    return (
+        <div className="ds-panel-soft px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+            <p className="mt-2 text-sm font-semibold text-slate-950">{value}</p>
+        </div>
+    );
+}
+
+function TemplateCard({ template, exercises, onApply, onDelete }) {
+    const getExerciseName = (exerciseId) => {
+        const match = exercises.find((item) => String(item.id) === String(exerciseId));
+        return match?.name ?? `exerciseId:${exerciseId}`;
+    };
+
+    return (
+        <div className="ds-panel-soft p-4">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <p className="text-sm font-semibold text-slate-950">{template.name}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">
+                        세트 {(template.sets ?? []).length}개
+                    </p>
+                </div>
+                <div className="flex gap-2">
+                    <Button variant="ghost" onClick={() => onApply(template)}>
+                        적용
+                    </Button>
+                    <Button variant="danger" onClick={() => onDelete(template.id)}>
+                        삭제
+                    </Button>
+                </div>
+            </div>
+
+            {template.memo && (
+                <p className="mt-3 text-sm leading-6 text-slate-600">{template.memo}</p>
+            )}
+
+            <ul className="mt-3 space-y-2">
+                {(template.sets ?? [])
+                    .slice()
+                    .sort((a, b) => (a.setOrder ?? 0) - (b.setOrder ?? 0))
+                    .map((set, idx) => (
+                        <li key={idx} className="rounded-2xl bg-white/70 px-3 py-2 text-sm text-slate-700">
+                            <span className="font-semibold text-slate-900">{getExerciseName(set.exerciseId)}</span>
+                            <span className="mx-2 text-slate-300">/</span>
+                            {set.weight}kg x {set.reps}
+                        </li>
+                    ))}
+            </ul>
+        </div>
+    );
+}
+
+function SetEditor({ exercises, row, index, onChange, onRemove, removable }) {
+    return (
+        <div className="ds-panel-soft space-y-3 p-4">
+            <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">운동</label>
+                <select
+                    className="ds-select text-sm"
+                    value={row.exerciseId}
+                    onChange={(e) => onChange(index, "exerciseId", e.target.value)}
+                >
+                    <option value="">운동을 선택하세요</option>
+                    {exercises.map((ex) => (
+                        <option key={ex.id} value={ex.id}>
+                            {ex.name}{ex.category ? ` (${ex.category})` : ""}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+                <Input
+                    label="무게(kg)"
+                    value={row.weight}
+                    onChange={(e) => onChange(index, "weight", e.target.value)}
+                    placeholder="예: 80"
+                />
+                <Input
+                    label="횟수(reps)"
+                    value={row.reps}
+                    onChange={(e) => onChange(index, "reps", e.target.value)}
+                    placeholder="예: 8"
+                />
+            </div>
+
+            {removable && (
+                <Button variant="ghost" className="w-full justify-center" onClick={() => onRemove(index)}>
+                    세트 삭제
+                </Button>
+            )}
         </div>
     );
 }

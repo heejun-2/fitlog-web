@@ -1,15 +1,15 @@
 import {
-    LineChart,
+    CartesianGrid,
     Line,
+    LineChart,
+    ResponsiveContainer,
+    Tooltip,
     XAxis,
     YAxis,
-    Tooltip,
-    ResponsiveContainer,
-    CartesianGrid,
 } from "recharts";
+import { chartTheme } from "../../theme/tokens";
 
-// const fmt = (d) => String(d).slice(5).replace("-", "/"); // 02-09 -> 02/09
-const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default function WeeklyTrendChart({ data }) {
     const chartData = (data ?? []).map((x) => ({
@@ -22,19 +22,32 @@ export default function WeeklyTrendChart({ data }) {
         <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                    <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => v.toLocaleString()} />
+                    <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: chartTheme.axis, fontSize: 12 }} />
+                    <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fill: chartTheme.axis, fontSize: 12 }}
+                        tickFormatter={(v) => v.toLocaleString()}
+                    />
                     <Tooltip
                         formatter={(v) => [`${Number(v).toLocaleString()}kg`, "볼륨"]}
-                        labelFormatter={(label) => `날짜 ${label}`}
+                        labelFormatter={(label) => `요일 ${label}`}
                         contentStyle={{
-                            borderRadius: 12,
-                            border: "1px solid #e2e8f0",
-                            boxShadow: "0 10px 30px rgba(2,6,23,0.08)",
+                            borderRadius: 18,
+                            border: `1px solid ${chartTheme.tooltipBorder}`,
+                            background: chartTheme.tooltipBackground,
+                            boxShadow: chartTheme.tooltipShadow,
                         }}
                     />
-                    <Line type="monotone" dataKey="volume" stroke="#0f172a" strokeWidth={3} dot={{ r: 4 }} />
+                    <Line
+                        type="monotone"
+                        dataKey="volume"
+                        stroke={chartTheme.primary}
+                        strokeWidth={3}
+                        dot={{ r: 4, fill: chartTheme.primaryDark, stroke: "#fff", strokeWidth: 2 }}
+                        activeDot={{ r: 5 }}
+                    />
                 </LineChart>
             </ResponsiveContainer>
         </div>

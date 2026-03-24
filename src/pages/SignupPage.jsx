@@ -7,11 +7,9 @@ import { signup } from "../api/auth";
 
 export default function SignupPage() {
     const nav = useNavigate();
-
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const [nickname, setNickname] = useState(""); // ✅ 추가
-
+    const [nickname, setNickname] = useState("");
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
 
@@ -21,19 +19,21 @@ export default function SignupPage() {
         setLoading(true);
 
         try {
-            await signup({ email, password, nickname }); // ✅ 포함
+            await signup({ email, password, nickname });
             nav("/login");
         } catch {
-            setErrorMsg("회원가입 실패: 이미 존재하는 이메일일 수 있어.");
+            setErrorMsg("회원가입에 실패했습니다. 이미 사용 중인 이메일일 수 있습니다.");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <AuthLayout title="회원가입" subtitle="30초면 끝. 이메일과 비밀번호만 입력해줘.">
-            <form onSubmit={onSubmit} className="space-y-4">
-
+        <AuthLayout
+            title="회원가입"
+            subtitle="이메일, 닉네임, 비밀번호만 입력하면 바로 FitLog를 시작할 수 있습니다."
+        >
+            <form onSubmit={onSubmit} className="space-y-5">
                 <Input
                     label="이메일"
                     value={email}
@@ -42,12 +42,11 @@ export default function SignupPage() {
                     autoComplete="email"
                 />
 
-                {/* ✅ 닉네임 추가 */}
                 <Input
                     label="닉네임"
                     value={nickname}
                     onChange={(e) => setNickname(e.target.value)}
-                    placeholder="활동명 / 닉네임"
+                    placeholder="표시할 이름을 입력하세요"
                     autoComplete="nickname"
                 />
 
@@ -61,22 +60,21 @@ export default function SignupPage() {
                 />
 
                 {errorMsg && (
-                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    <div className="ds-alert px-4 py-3 text-sm">
                         {errorMsg}
                     </div>
                 )}
 
-                <Button className="w-full" disabled={loading}>
+                <Button className="w-full justify-center" disabled={loading}>
                     {loading ? "가입 중..." : "회원가입"}
                 </Button>
 
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center justify-between pt-2">
                     <span className="text-sm text-slate-600">이미 계정이 있나요?</span>
-                    <Link className="text-sm font-semibold text-slate-900 hover:underline" to="/login">
+                    <Link className="text-sm font-semibold text-slate-900 hover:text-orange-600" to="/login">
                         로그인
                     </Link>
                 </div>
-
             </form>
         </AuthLayout>
     );

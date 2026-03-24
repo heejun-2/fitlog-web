@@ -1,12 +1,13 @@
 import {
-    BarChart,
     Bar,
+    BarChart,
+    CartesianGrid,
+    ResponsiveContainer,
+    Tooltip,
     XAxis,
     YAxis,
-    Tooltip,
-    ResponsiveContainer,
-    CartesianGrid,
 } from "recharts";
+import { chartTheme } from "../../theme/tokens";
 
 function formatKg(v) {
     return `${Number(v ?? 0).toLocaleString()}kg`;
@@ -20,17 +21,14 @@ export default function VolumeByCategoryChart({ data }) {
     return (
         <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                    layout="vertical"   // ⭐ 핵심
-                    data={chartData}
-                    margin={{ top: 10, right: 20, left: 10, bottom: 10 }}
-                >
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <BarChart layout="vertical" data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+                    <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" horizontal={false} />
 
                     <XAxis
                         type="number"
                         tickLine={false}
                         axisLine={false}
+                        tick={{ fill: chartTheme.axis, fontSize: 12 }}
                         tickFormatter={(v) => `${Number(v).toLocaleString()}`}
                     />
 
@@ -39,24 +37,21 @@ export default function VolumeByCategoryChart({ data }) {
                         dataKey="category"
                         tickLine={false}
                         axisLine={false}
-                        width={80}
+                        tick={{ fill: chartTheme.axis, fontSize: 12 }}
+                        width={88}
                     />
 
                     <Tooltip
                         formatter={(value) => [formatKg(value), "볼륨"]}
                         contentStyle={{
-                            borderRadius: 12,
-                            border: "1px solid #e2e8f0",
-                            boxShadow: "0 10px 30px rgba(2,6,23,0.08)",
+                            borderRadius: 18,
+                            border: `1px solid ${chartTheme.tooltipBorder}`,
+                            background: chartTheme.tooltipBackground,
+                            boxShadow: chartTheme.tooltipShadow,
                         }}
                     />
 
-                    <Bar
-                        dataKey="volume"
-                        fill="#0f172a"
-                        radius={[0, 12, 12, 0]} // 오른쪽 둥글게
-                        barSize={28}
-                    />
+                    <Bar dataKey="volume" fill={chartTheme.primary} radius={[0, 14, 14, 0]} barSize={28} />
                 </BarChart>
             </ResponsiveContainer>
         </div>
