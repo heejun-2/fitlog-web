@@ -64,8 +64,22 @@ function PublicRoute({ children }) {
 export default function AppRouter() {
     return (
         <Routes>
-            <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-            <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
+            <Route
+                path="/login"
+                element={
+                    <PublicRoute>
+                        <LoginPage />
+                    </PublicRoute>
+                }
+            />
+            <Route
+                path="/signup"
+                element={
+                    <PublicRoute>
+                        <SignupPage />
+                    </PublicRoute>
+                }
+            />
 
             <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<DashboardPage />} />

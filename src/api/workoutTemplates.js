@@ -10,6 +10,11 @@ export async function createWorkoutTemplate(payload) {
     return res.data;
 }
 
+export async function updateWorkoutTemplate(templateId, payload) {
+    const res = await http.put(`/api/workout-templates/${templateId}`, payload);
+    return res.data;
+}
+
 export async function deleteWorkoutTemplate(templateId) {
     const res = await http.delete(`/api/workout-templates/${templateId}`);
     return res.data;
