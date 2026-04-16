@@ -5,9 +5,10 @@ import SignupPage from "../pages/SignupPage.jsx";
 import DashboardPage from "../pages/DashboardPage.jsx";
 import StatsPage from "../pages/StatsPage.jsx";
 import { meApi } from "../api/auth";
+import { clearAuthSession, getAccessToken } from "../utils/authStorage";
 
 function ProtectedRoute() {
-    const token = localStorage.getItem("accessToken");
+    const token = getAccessToken();
     const [checking, setChecking] = useState(true);
     const [authorized, setAuthorized] = useState(false);
 
@@ -23,8 +24,7 @@ function ProtectedRoute() {
                 await meApi();
                 setAuthorized(true);
             } catch {
-                localStorage.removeItem("accessToken");
-                localStorage.removeItem("me");
+                clearAuthSession();
                 setAuthorized(false);
             } finally {
                 setChecking(false);
@@ -54,7 +54,7 @@ function ProtectedRoute() {
 }
 
 function PublicRoute({ children }) {
-    const token = localStorage.getItem("accessToken");
+    const token = getAccessToken();
     if (token) {
         return <Navigate to="/dashboard" replace />;
     }

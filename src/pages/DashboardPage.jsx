@@ -14,6 +14,7 @@ import {
     listWorkoutTemplates,
     updateWorkoutTemplate,
 } from "../api/workoutTemplates";
+import { clearAuthSession, getStoredMe } from "../utils/authStorage";
 
 function formatLocalDate(date) {
     const year = date.getFullYear();
@@ -133,13 +134,7 @@ function getGroupVolume(sets = []) {
 }
 
 export default function DashboardPage() {
-    const [me] = useState(() => {
-        try {
-            return JSON.parse(localStorage.getItem("me") || "null");
-        } catch {
-            return null;
-        }
-    });
+    const [me] = useState(() => getStoredMe());
 
     const today = new Date().toISOString().slice(0, 10);
     const [queryDate, setQueryDate] = useState(today);
@@ -170,8 +165,7 @@ export default function DashboardPage() {
     const [editExerciseBlocks, setEditExerciseBlocks] = useState([createEmptyExerciseBlock()]);
 
     const logout = () => {
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("me");
+        clearAuthSession();
         window.location.href = "/login";
     };
 
